@@ -3,6 +3,8 @@ import time
 import csv
 import numpy as np
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"                 # MODIFICA NOSTRA
+
 import torch
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -13,9 +15,12 @@ import models
 from metrics import AverageMeter, Result
 import utils
 
+
 args = utils.parse_command()
-print(args)
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu # Set the GPU.
+# print(args)
+print("args: " , args)
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"              # WIP, Usato per settare la CPU al posto della GPU
+# os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu         # Set the GPU.  ORIGINALE
 
 fieldnames = ['rmse', 'mae', 'delta1', 'absrel',
             'lg10', 'mse', 'delta2', 'delta3', 'data_time', 'gpu_time']
@@ -37,16 +42,24 @@ def main():
         raise RuntimeError('Dataset not found.')
 
     # set batch size to be 1 for validation
-    val_loader = torch.utils.data.DataLoader(val_dataset,
-        batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
+    """num_workers causa BrokenPipeError: [Errno 32] Broken pipe, cio è dovuto alla mancanza di RAM (o VRAM, ma dubito avendone solo 2 GB).
+        Chiudere piu app possibili prima di avviare il programma"""
+    """il numero di workers usati indica il numero di output di namespace; probabile che indichi il
+        numero di processi paralleli creati"""
+    # args.workers è 16, cambiarlo non sembra impattare le performance, necessario misurare il tempo precisamente tho
+    # val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)   # ORIGINALE
     print("=> data loaders created.")
+
+    check_is_cuda_used()
 
     # evaluation mode
     if args.evaluate:
         assert os.path.isfile(args.evaluate), \
         "=> no model found at '{}'".format(args.evaluate)
-        print("=> loading model '{}'".format(args.evaluate))
-        checkpoint = torch.load(args.evaluate)
+        print("=> loading model '{}'".format(args.evaluate))        
+        # checkpoint = torch.load(args.evaluate)        # ORIGINALE
+        checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
         if type(checkpoint) is dict:
             args.start_epoch = checkpoint['epoch']
             best_result = checkpoint['best_result']
@@ -60,12 +73,35 @@ def main():
         return
 
 
+# controllo per vedere se/quale GPU è usata
+def check_is_cuda_used():
+    print("torch.__version__ :" , torch.__version__)
+    print("torch.cuda.is_available(): " , torch.cuda.is_available())
+    print("torch.cuda.device_count(): " , torch.cuda.device_count())
+    if (torch.cuda.is_available()):  # in caso si usi la CPU
+        print("torch.cuda.current_device(): " , torch.cuda.current_device())
+        print("torch.cuda.device(???)" , torch.cuda.device(torch.cuda.current_device()))
+        print("torch.cuda.get_device_name(???)" , torch.cuda.get_device_name(torch.cuda.current_device()))
+
+
+# flashing della memoria, per evitare errori di runtime
+def force_cudnn_initialization():
+    s = 32
+    dev = torch.device('cuda')
+    torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
+
+
 def validate(val_loader, model, epoch, write_to_file=True):
     average_meter = AverageMeter()
     model.eval() # switch to evaluate mode
     end = time.time()
+    """
+    Viene eseguita una iterazione per ogni immagine valutata (in questo caso le 654 immagini di /val)
+    """
     for i, (input, target) in enumerate(val_loader):
-        input, target = input.cuda(), target.cuda()
+        # input, target = input.cuda(), target.cuda()       # ORIGINALE
+        input, target = input.cpu() , target.cpu()
+        # print ("OUTPUT PROVA 1")                          # durante il testing di CPU, qua si arrestava
         # torch.cuda.synchronize()
         data_time = time.time() - end
 
