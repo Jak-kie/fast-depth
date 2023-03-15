@@ -3,8 +3,6 @@ import time
 import csv
 import numpy as np
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"                 # MODIFICA NOSTRA
-
 import torch
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -17,16 +15,17 @@ import utils
 
 
 args = utils.parse_command()
-# print(args)
-print("args: " , args)
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"              # WIP, Usato per settare la CPU al posto della GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = args.device        # Setta il device usato
 # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu         # Set the GPU.  ORIGINALE
 
+# rimpiazzare gpu_time con device_time da problemi con la libreria metrics,
+# quindi cambiamolo solo quando è in output
 fieldnames = ['rmse', 'mae', 'delta1', 'absrel',
             'lg10', 'mse', 'delta2', 'delta3', 'data_time', 'gpu_time']
 best_fieldnames = ['best_epoch'] + fieldnames
 best_result = Result()
 best_result.set_to_worst()
+
 
 def main():
     global args, best_result, output_directory, train_csv, test_csv
@@ -42,13 +41,7 @@ def main():
         raise RuntimeError('Dataset not found.')
 
     # set batch size to be 1 for validation
-    """num_workers causa BrokenPipeError: [Errno 32] Broken pipe, cio è dovuto alla mancanza di RAM (o VRAM, ma dubito avendone solo 2 GB).
-        Chiudere piu app possibili prima di avviare il programma"""
-    """il numero di workers usati indica il numero di output di namespace; probabile che indichi il
-        numero di processi paralleli creati"""
-    # args.workers è 16, cambiarlo non sembra impattare le performance, necessario misurare il tempo precisamente tho
-    # val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)   # ORIGINALE
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
     print("=> data loaders created.")
 
     check_is_cuda_used()
@@ -59,7 +52,10 @@ def main():
         "=> no model found at '{}'".format(args.evaluate)
         print("=> loading model '{}'".format(args.evaluate))        
         # checkpoint = torch.load(args.evaluate)        # ORIGINALE
-        checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
+        if (args.device == "-1"):           # carica CPU
+            checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
+        else:                               # carica GPU
+            checkpoint = torch.load(args.evaluate)            
         if type(checkpoint) is dict:
             args.start_epoch = checkpoint['epoch']
             best_result = checkpoint['best_result']
@@ -95,13 +91,12 @@ def validate(val_loader, model, epoch, write_to_file=True):
     average_meter = AverageMeter()
     model.eval() # switch to evaluate mode
     end = time.time()
-    """
-    Viene eseguita una iterazione per ogni immagine valutata (in questo caso le 654 immagini di /val)
-    """
+    # Viene eseguita una iterazione per ogni immagine valutata (in questo caso le 654 immagini di /val)
     for i, (input, target) in enumerate(val_loader):
-        # input, target = input.cuda(), target.cuda()       # ORIGINALE
-        input, target = input.cpu() , target.cpu()
-        # print ("OUTPUT PROVA 1")                          # durante il testing di CPU, qua si arrestava
+        if (args.device == "-1"):
+            input, target = input.cpu() , target.cpu()
+        else:
+            input, target = input.cuda(), target.cuda()     # ORIGINALE
         # torch.cuda.synchronize()
         data_time = time.time() - end
 
@@ -135,7 +130,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
         if (i+1) % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'
-                  't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
+                  't_DEVICE={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
                   'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
                   'MAE={result.mae:.2f}({average.mae:.2f}) '
                   'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
@@ -145,21 +140,23 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
     avg = average_meter.average()
 
+    # modificato t_GPU --> t_DEVICE
     print('\n*\n'
         'RMSE={average.rmse:.3f}\n'
         'MAE={average.mae:.3f}\n'
         'Delta1={average.delta1:.3f}\n'
         'REL={average.absrel:.3f}\n'
         'Lg10={average.lg10:.3f}\n'
-        't_GPU={time:.3f}\n'.format(
+        't_DEVICE={time:.3f}\n'.format(
         average=avg, time=avg.gpu_time))
 
+    # TODO vedere se gpu_time puo essere sostituito con device_time
     if write_to_file:
         with open(test_csv, 'a') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
                 'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
-                'data_time': avg.data_time, 'gpu_time': avg.gpu_time})
+                'data_time': avg.data_time, 'device_time': avg.gpu_time})
     return avg, img_merge
 
 if __name__ == '__main__':
