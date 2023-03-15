@@ -5,7 +5,7 @@ import random
 
 from PIL import Image, ImageOps, ImageEnhance
 try:
-    import accimage
+    import accimage                 # gestisce da solo il caso in cui non sia presente, usando un'altra libreria
 except ImportError:
     accimage = None
 
@@ -17,6 +17,7 @@ import warnings
 
 import scipy.ndimage.interpolation as itpl
 import scipy.misc as misc
+
 
 
 def _is_numpy_image(img):
@@ -334,8 +335,10 @@ class Resize(object):
             PIL Image: Rescaled image.
         """
         if img.ndim == 3:
-            return misc.imresize(img, self.size, self.interpolation)
+            # return np.array(Image.fromarray(img).resize(self.size))             # in caso aggiorniamo alla versione nuova, NON FUNZIONANTE
+            return misc.imresize(img, self.size, self.interpolation)              # ORIGINALE
         elif img.ndim == 2:
+            # return np.array(Image.fromarray(img).resize(self.size))
             return misc.imresize(img, self.size, self.interpolation, 'F')
         else:
             RuntimeError('img should be ndarray with 2 or 3 dimensions. Got {}'.format(img.ndim))
