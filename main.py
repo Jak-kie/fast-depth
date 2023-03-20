@@ -14,6 +14,8 @@ from metrics import AverageMeter, Result
 import utils
 
 
+# COMANDO python .\main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0
+
 args = utils.parse_command()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device        # Setta il device usato
 # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu         # Set the GPU.  ORIGINALE
