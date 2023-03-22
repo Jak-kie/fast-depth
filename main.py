@@ -13,8 +13,12 @@ import models
 from metrics import AverageMeter, Result
 import utils
 
+import matplotlib.pyplot as plt         # per validateSingleImage 
+from skimage.transform import resize
+
 
 # COMANDO python .\main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0
+
 
 args = utils.parse_command()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device        # Setta il device usato
@@ -31,6 +35,15 @@ best_result.set_to_worst()
 
 def main():
     global args, best_result, output_directory, train_csv, test_csv
+
+    torch.cuda.empty_cache()
+
+    check_is_cuda_used()
+
+    # richiama l'analisi della singola immagine
+    if True:
+        validateSingleImage()
+        return
 
     # Data loading code
     print("=> creating data loaders...")
@@ -83,10 +96,12 @@ def check_is_cuda_used():
 
 
 # flashing della memoria, per evitare errori di runtime
+"""
 def force_cudnn_initialization():
     s = 32
     dev = torch.device('cuda')
     torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
+"""
 
 
 def validate(val_loader, model, epoch, write_to_file=True):
@@ -120,6 +135,12 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
         if args.modality == 'rgb':
             rgb = input
+
+        """
+        rgb = immagine di input iniziale
+        target = truth mask
+        pred = prediction del modello 
+        """
 
         if i == 0:
             img_merge = utils.merge_into_row(rgb, target, pred)
@@ -160,6 +181,72 @@ def validate(val_loader, model, epoch, write_to_file=True):
                 'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
                 'data_time': avg.data_time, 'device_time': avg.gpu_time})
     return avg, img_merge
+
+
+"""
+INPUT: 1 immagine
+OUTPUT: depth map dell'input in formato ...
+"""
+def validateSingleImage():
+    
+    outputSize = (224, 224)
+
+    imagePath = "D:\Marco\immagini\jj.jpg"
+
+    # temporaneamente usiamo i parametri per ottenere la immagine
+    # valdir = os.path.join('..', 'data', args.data, 'val', 'official', '00001.h5')
+    
+    inputImage = plt.imread(imagePath)/255.    # normalization, pixel tra [0,1]
+    inputImage = resize(inputImage, outputSize)                 # (224, 224, 3)
+
+    # usa np.transpose al posto di np.reshape, risultati decisamente migliori
+    # inputImage = np.reshape(inputImage, (3, 224, 224))            # (3, 224, 224)
+    inputImage = np.transpose(inputImage, (2,0,1))              # (3, 224, 224)
+    inputImage = np.expand_dims(inputImage, axis=0)               # (1, 3, 224, 224)
+
+    # per funzionare il model richiede una immagine in formato NCHW [1,3,224,224]
+
+    # carica il modello passato per args
+    if (args.device == "-1"):           # carica CPU
+        checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
+    else:                               # carica GPU
+        checkpoint = torch.load(args.evaluate)            
+    if type(checkpoint) is dict:
+        args.start_epoch = checkpoint['epoch']
+        model = checkpoint['model']
+    else:
+        model = checkpoint
+        args.start_epoch = 0
+
+    # effettua la prediction
+    with torch.no_grad():
+        pred = model(torch.from_numpy(inputImage).float().cuda())
+    
+    """
+    output di pred
+    tensor([[[[1.7303, 1.7303, 1.7306,  ..., 1.6876, 1.7618, 1.7618],
+          [1.7303, 1.7303, 1.7306,  ..., 1.6876, 1.7618, 1.7618],
+          [1.6839, 1.6839, 1.6673,  ..., 1.6338, 1.6839, 1.6839],
+          ...,
+          [1.3466, 1.3466, 1.3264,  ..., 1.8757, 1.8533, 1.8533],
+          [1.4089, 1.4089, 1.3693,  ..., 1.7751, 1.7419, 1.7419],
+          [1.4089, 1.4089, 1.3693,  ..., 1.7751, 1.7419, 1.7419]]]],
+       device='cuda:0')
+    """
+
+    """
+    pred.size()         --> torch.Size([1, 1, 224, 224])
+    torch.squeeze(pred) -->  torch.Size([224, 224])
+    """
+
+    pred = torch.squeeze(pred)
+    # ora pred è una matrice 2D, con valori validi di depth map
+
+    """
+    plt.imshow(pred)
+    plt.show()
+    """
+
 
 if __name__ == '__main__':
     main()
