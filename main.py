@@ -59,8 +59,6 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
     print("=> data loaders created.")
 
-    check_is_cuda_used()
-
     # evaluation mode
     if args.evaluate:
         assert os.path.isfile(args.evaluate), \
@@ -93,15 +91,6 @@ def check_is_cuda_used():
         print("torch.cuda.current_device(): " , torch.cuda.current_device())
         print("torch.cuda.device(???)" , torch.cuda.device(torch.cuda.current_device()))
         print("torch.cuda.get_device_name(???)" , torch.cuda.get_device_name(torch.cuda.current_device()))
-
-
-# flashing della memoria, per evitare errori di runtime
-"""
-def force_cudnn_initialization():
-    s = 32
-    dev = torch.device('cuda')
-    torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
-"""
 
 
 def validate(val_loader, model, epoch, write_to_file=True):
@@ -141,7 +130,6 @@ def validate(val_loader, model, epoch, write_to_file=True):
         target = truth mask
         pred = prediction del modello 
         """
-
         if i == 0:
             img_merge = utils.merge_into_row(rgb, target, pred)
         elif (i < 8*skip) and (i % skip == 0):
@@ -184,8 +172,8 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
 
 """
-INPUT: 1 immagine
-OUTPUT: depth map dell'input in formato ...
+INPUT: 1 immagine (path oppure file immagine)
+OUTPUT: depth map in formato [224, 224], con valori [0,1]
 """
 def validateSingleImage():
     
@@ -209,8 +197,10 @@ def validateSingleImage():
     # carica il modello passato per args
     if (args.device == "-1"):           # carica CPU
         checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
+        inputImage = torch.from_numpy(inputImage).float().cpu()
     else:                               # carica GPU
-        checkpoint = torch.load(args.evaluate)            
+        checkpoint = torch.load(args.evaluate)
+        inputImage = torch.from_numpy(inputImage).float().cuda()       
     if type(checkpoint) is dict:
         args.start_epoch = checkpoint['epoch']
         model = checkpoint['model']
@@ -220,10 +210,10 @@ def validateSingleImage():
 
     # effettua la prediction
     with torch.no_grad():
-        pred = model(torch.from_numpy(inputImage).float().cuda())
+        pred = model(inputImage)
     
     """
-    output di pred
+    output tipo di pred
     tensor([[[[1.7303, 1.7303, 1.7306,  ..., 1.6876, 1.7618, 1.7618],
           [1.7303, 1.7303, 1.7306,  ..., 1.6876, 1.7618, 1.7618],
           [1.6839, 1.6839, 1.6673,  ..., 1.6338, 1.6839, 1.6839],
@@ -235,17 +225,34 @@ def validateSingleImage():
     """
 
     """
-    pred.size()         --> torch.Size([1, 1, 224, 224])
+    pred.size()         -->  torch.Size([1, 1, 224, 224])
     torch.squeeze(pred) -->  torch.Size([224, 224])
+    """
+
+    """
+    .numpy() garantisce una precisione maggiore, oltre a renderlo un array .numpy       1.7751 --> 1.7751079
+        valutare se serve che sia un numpyarray
+    .cpu() rimuove l'eventuale "device='cuda:0'", non penso faccia altro
+
+    pred1 = torch.squeeze(pred)
+    pred2 = np.squeeze(pred.data.cpu().numpy())
+
+    plt.imshow(pred1)
+    plt.show()
+    plt.imshow(pred2)
+    plt.show()
+
+    print(pred1.data.cpu().numpy())
+    print(pred2)
+
+    print(pred1.shape)
+    print(pred2.shape)
     """
 
     pred = torch.squeeze(pred)
     # ora pred è una matrice 2D, con valori validi di depth map
-
-    """
     plt.imshow(pred)
     plt.show()
-    """
 
 
 if __name__ == '__main__':
