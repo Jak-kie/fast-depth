@@ -184,7 +184,9 @@ def validateSingleImage():
     # temporaneamente usiamo i parametri per ottenere la immagine
     # valdir = os.path.join('..', 'data', args.data, 'val', 'official', '00001.h5')
     
-    inputImage = plt.imread(imagePath)/255.    # normalization, pixel tra [0,1]
+    # N.B. /255. suppone immagini RGB a 8 bit
+    inputImage = plt.imread(imagePath)/255.    # normalization, valori dei pixel tra [0,1]
+
     inputImage = resize(inputImage, outputSize)                 # (224, 224, 3)
 
     # usa np.transpose al posto di np.reshape, risultati decisamente migliori
@@ -253,6 +255,11 @@ def validateSingleImage():
     # ora pred è una matrice 2D, con valori validi di depth map
     plt.imshow(pred)
     plt.show()
+
+    minPred = torch.min(pred)
+    maxPred = torch.max(pred)
+    print("Valore minimo di pred: " , minPred)
+    print("Valore MASSIMO di pred: " , maxPred)
 
 
 if __name__ == '__main__':
