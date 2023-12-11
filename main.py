@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt         # per validateSingleImage
 from skimage.transform import resize
 
 
-# COMANDO python .\main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0
+# COMANDO PER GPU python .\main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0
 
 
 args = utils.parse_command()
