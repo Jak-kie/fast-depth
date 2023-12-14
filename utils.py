@@ -27,10 +27,15 @@ def parse_command():
     parser.add_argument('--print-freq', '-p', default=50, type=int,
                         metavar='N', help='print frequency (default: 50)')
     parser.add_argument('-e', '--evaluate', default='', type=str, metavar='PATH',)
+
     # parser.add_argument('--gpu', default='0', type=str, metavar='N', help="gpu id")           # ORIGINALE
     # Per scegliere se usare la GPU o la CPU. CPU == -1, GPU == 0. Si deve scrivere --device 0 / --device -1 rispettivamente
     # per GPU o CPU. altri numeri identificano altre GPU
     parser.add_argument('-d', '--device', default='0', type=str, metavar='N', help="device id")
+    
+    # per scegliere se usare tutto il dataset o solo una immagine come test
+    parser.add_argument('-D', '--datamode', default='1', type=str, metavar='N', help="datamode id")
+
     parser.set_defaults(cuda=True)
 
     args = parser.parse_args()
