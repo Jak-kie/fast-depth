@@ -16,9 +16,12 @@ import utils
 import matplotlib.pyplot as plt         # per validateSingleImage 
 from skimage.transform import resize
 
+import gc                               # per reset della memoria
 
-# COMANDO python .\main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0
 
+# COMANDO PER GPU WINDOWS python main.py --evaluate ..\results\mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0 --datamode 0
+# COMANDO PER GPU LINUX   python main.py --evaluate ../results/mobilenet-nnconv5dw-skipadd-pruned.pth.tar --device 0 --datamode 1
+# --datamode 0 "SELEZIONO TUTTO IL DATASET" || --datamode 1 "SELEZIONO SOLO 1 IMMAGINE"
 
 args = utils.parse_command()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.device        # Setta il device usato
@@ -35,51 +38,56 @@ best_result.set_to_worst()
 
 def main():
     global args, best_result, output_directory, train_csv, test_csv
-
+    
+    # reset della memoria gpu prima dell'esecuzione
+    gc.collect()
     torch.cuda.empty_cache()
 
     check_is_cuda_used()
 
+    print ("args.datamode:" ,args.datamode)
+
     # richiama l'analisi della singola immagine
-    if True:
+    if args.datamode == "1":
+        print("SELEZIONATA LAVORAZIONE SU SINGOLA IMMAGINE")
         validateSingleImage()
-        return
-
-    # Data loading code
-    print("=> creating data loaders...")
-    valdir = os.path.join('..', 'data', args.data, 'val')
-
-    if args.data == 'nyudepthv2':
-        from dataloaders.nyu import NYUDataset
-        val_dataset = NYUDataset(valdir, split='val', modality=args.modality)
     else:
-        raise RuntimeError('Dataset not found.')
+        print("SELEZIONATA LAVORAZIONE SU NYUV2 DATASET")
+        # Data loading code
+        print("=> creating data loaders...")
+        valdir = os.path.join('..', 'data', args.data, 'val')
 
-    # set batch size to be 1 for validation
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
-    print("=> data loaders created.")
-
-    # evaluation mode
-    if args.evaluate:
-        assert os.path.isfile(args.evaluate), \
-        "=> no model found at '{}'".format(args.evaluate)
-        print("=> loading model '{}'".format(args.evaluate))        
-        # checkpoint = torch.load(args.evaluate)        # ORIGINALE
-        if (args.device == "-1"):           # carica CPU
-            checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
-        else:                               # carica GPU
-            checkpoint = torch.load(args.evaluate)            
-        if type(checkpoint) is dict:
-            args.start_epoch = checkpoint['epoch']
-            best_result = checkpoint['best_result']
-            model = checkpoint['model']
-            print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+        if args.data == 'nyudepthv2':
+            from dataloaders.nyu import NYUDataset
+            val_dataset = NYUDataset(valdir, split='val', modality=args.modality)
         else:
-            model = checkpoint
-            args.start_epoch = 0
-        output_directory = os.path.dirname(args.evaluate)
-        validate(val_loader, model, args.start_epoch, write_to_file=False)
-        return
+            raise RuntimeError('Dataset not found.')
+
+        # set batch size to be 1 for validation
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.workers, pin_memory=True)
+        print("=> data loaders created.")
+
+        # evaluation mode
+        if args.evaluate:
+            assert os.path.isfile(args.evaluate), \
+            "=> no model found at '{}'".format(args.evaluate)
+            print("=> loading model '{}'".format(args.evaluate))        
+            # checkpoint = torch.load(args.evaluate)        # ORIGINALE
+            if (args.device == "-1"):           # carica CPU
+                checkpoint = torch.load(args.evaluate, map_location=torch.device('cpu'))
+            else:                               # carica GPU
+                checkpoint = torch.load(args.evaluate)            
+            if type(checkpoint) is dict:
+                args.start_epoch = checkpoint['epoch']
+                best_result = checkpoint['best_result']
+                model = checkpoint['model']
+                print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+            else:
+                model = checkpoint
+                args.start_epoch = 0
+            output_directory = os.path.dirname(args.evaluate)
+            validate(val_loader, model, args.start_epoch, write_to_file=False)
+    return
 
 
 # controllo per vedere se/quale GPU è usata
@@ -253,8 +261,9 @@ def validateSingleImage():
 
     pred = torch.squeeze(pred)
     # ora pred è una matrice 2D, con valori validi di depth map
-    plt.imshow(pred)
-    plt.show()
+    # N.B. da remoto non viene mostrata
+    # plt.imshow(pred)
+    # plt.show()
 
     minPred = torch.min(pred)
     maxPred = torch.max(pred)
