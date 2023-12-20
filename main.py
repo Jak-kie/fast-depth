@@ -179,7 +179,7 @@ def validateSingleImage():
     
     outputSize = (224, 224)
 
-    imagePath = "D:\Marco\immagini\jj.jpg"
+    imagePath = "jj.jpg"
 
     # temporaneamente usiamo i parametri per ottenere la immagine
     # valdir = os.path.join('..', 'data', args.data, 'val', 'official', '00001.h5')
